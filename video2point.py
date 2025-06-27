@@ -54,6 +54,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser() 
     parser.add_argument("path", type=str, help="input path to the video")
     parser.add_argument('valid_cam', type=str, help='valid camera numbers')
+    parser.add_argument('--extract', action='store_true', help='extract images from videos', default=False)
     args = parser.parse_args()
     
     valid_cam = [int(c) for c in args.valid_cam.split(',')]
@@ -75,10 +76,11 @@ if __name__ == '__main__':
     os.makedirs(images_path, exist_ok=True)
     assert os.path.exists(save_dir), f"save_dir {save_dir} does not exist"
     
-    for video in videos:
-        cam_name = video.split('/')[-1].split('.')[-2]
-        do_system(f"ffmpeg -i {video} -start_number 0 {images_path}/{cam_name}_%04d.png")
-    print(f"Extracted images from {len(videos)} videos to {images_path}")
+    if args.extract:
+        for video in videos:
+            cam_name = video.split('/')[-1].split('.')[-2]
+            do_system(f"ffmpeg -i {video} -start_number 0 {images_path}/{cam_name}_%04d.png")
+        print(f"Extracted images from {len(videos)} videos to {images_path}")
         
     # load data
     images = [f[len(save_dir):] for f in sorted(glob.glob(os.path.join(images_path, "*"))) if f.lower().endswith('png') or f.lower().endswith('jpg') or f.lower().endswith('jpeg')]

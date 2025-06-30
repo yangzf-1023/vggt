@@ -4,10 +4,14 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+from email.mime import image
 import random
 import numpy as np
 import glob
 import os
+
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
 import copy
 import torch
 import torch.nn.functional as F
@@ -111,8 +115,7 @@ def demo_fn(args):
 
     # Run VGGT for camera and depth estimation
     model = VGGT()
-    _URL = "https://huggingface.co/facebook/VGGT-1B/resolve/main/model.pt"
-    model.load_state_dict(torch.hub.load_state_dict_from_url(_URL))
+    model.load_state_dict(torch.load("checkpoint/model.pt"))
     model.eval()
     model = model.to(device)
     print(f"Model loaded")
@@ -120,6 +123,12 @@ def demo_fn(args):
     # Get image paths and preprocess them
     image_dir = os.path.join(args.scene_dir, "images")
     image_path_list = glob.glob(os.path.join(image_dir, "*"))
+    
+    # 点云只要第一帧的
+    image_path_list = [img_path for img_path in image_path_list if img_path.endswith("0000.png")]
+        
+    n_images = len(image_path_list)
+    args.query_frame_num = min(args.query_frame_num, n_images)
     if len(image_path_list) == 0:
         raise ValueError(f"No images found in {image_dir}")
     base_image_path_list = [os.path.basename(path) for path in image_path_list]
@@ -138,8 +147,11 @@ def demo_fn(args):
     # Run with 518x518 images
     extrinsic, intrinsic, depth_map, depth_conf = run_VGGT(model, images, dtype, vggt_fixed_resolution)
     points_3d = unproject_depth_map_to_point_map(depth_map, extrinsic, intrinsic)
+    
+    print('Predicted camera and depth maps')
 
     if args.use_ba:
+        print("Running VGGT+BA")
         image_size = np.array(images.shape[-2:])
         scale = img_load_resolution / vggt_fixed_resolution
         shared_camera = args.shared_camera
@@ -162,6 +174,7 @@ def demo_fn(args):
                 keypoint_extractor="aliked+sp",
                 fine_tracking=args.fine_tracking,
             )
+            print(f"Predicted tracks")
 
             torch.cuda.empty_cache()
 
@@ -182,6 +195,7 @@ def demo_fn(args):
             camera_type=args.camera_type,
             points_rgb=points_rgb,
         )
+        print(f"Reconstructed")
 
         if reconstruction is None:
             raise ValueError("No reconstruction can be built with BA")
@@ -192,8 +206,9 @@ def demo_fn(args):
 
         reconstruction_resolution = img_load_resolution
     else:
+        print("Running VGGT without BA")
         conf_thres_value = args.conf_thres_value
-        max_points_for_colmap = 100000  # randomly sample 3D points
+        max_points_for_colmap = 300000  # randomly sample 3D points
         shared_camera = False  # in the feedforward manner, we do not support shared camera
         camera_type = "PINHOLE"  # in the feedforward manner, we only support PINHOLE camera
 
@@ -239,14 +254,14 @@ def demo_fn(args):
         shift_point2d_to_original_res=True,
         shared_camera=shared_camera,
     )
-
-    print(f"Saving reconstruction to {args.scene_dir}/sparse")
-    sparse_reconstruction_dir = os.path.join(args.scene_dir, "sparse")
+    print(f"Saving reconstruction to {args.scene_dir}/sparse/0")
+    sparse_reconstruction_dir = os.path.join(args.scene_dir, "sparse", "0")
+        
     os.makedirs(sparse_reconstruction_dir, exist_ok=True)
     reconstruction.write(sparse_reconstruction_dir)
 
     # Save point cloud for fast visualization
-    trimesh.PointCloud(points_3d, colors=points_rgb).export(os.path.join(args.scene_dir, "sparse/points.ply"))
+    trimesh.PointCloud(points_3d, colors=points_rgb).export(os.path.join(args.scene_dir, "sparse", "0", "points.ply"))
 
     return True
 

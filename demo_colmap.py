@@ -4,13 +4,12 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-from email.mime import image
 import random
 import numpy as np
 import glob
 import os
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "4"
 
 import copy
 import torch
@@ -49,20 +48,14 @@ def parse_args():
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     parser.add_argument("--use_ba", action="store_true", default=False, help="Use BA for reconstruction")
     ######### BA parameters #########
-    parser.add_argument(
-        "--max_reproj_error", type=float, default=8.0, help="Maximum reprojection error for reconstruction"
-    )
+    parser.add_argument("--max_reproj_error", type=float, default=8.0, help="Maximum reprojection error for reconstruction (BA)")
     parser.add_argument("--shared_camera", action="store_true", default=False, help="Use shared camera for all images")
-    parser.add_argument("--camera_type", type=str, default="SIMPLE_PINHOLE", help="Camera type for reconstruction")
-    parser.add_argument("--vis_thresh", type=float, default=0.2, help="Visibility threshold for tracks")
-    parser.add_argument("--query_frame_num", type=int, default=8, help="Number of frames to query")
-    parser.add_argument("--max_query_pts", type=int, default=4096, help="Maximum number of query points")
-    parser.add_argument(
-        "--fine_tracking", action="store_true", default=True, help="Use fine tracking (slower but more accurate)"
-    )
-    parser.add_argument(
-        "--conf_thres_value", type=float, default=5.0, help="Confidence threshold value for depth filtering (wo BA)"
-    )
+    parser.add_argument("--camera_type", type=str, default="SIMPLE_PINHOLE", help="Camera type for reconstruction (BA)")
+    parser.add_argument("--vis_thresh", type=float, default=0.2, help="Visibility threshold for tracks (BA)")
+    parser.add_argument("--query_frame_num", type=int, default=8, help="Number of frames to query (BA)")
+    parser.add_argument("--max_query_pts", type=int, default=4096, help="Maximum number of query points (BA)")
+    parser.add_argument("--fine_tracking", action="store_true", default=True, help="Use fine tracking (slower but more accurate) (BA)")
+    # parser.add_argument("--conf_thres_value", type=float, default=5.0, help="Confidence threshold value for depth filtering (wo BA)")
     return parser.parse_args()
 
 
@@ -147,7 +140,6 @@ def demo_fn(args):
     # Run with 518x518 images
     extrinsic, intrinsic, depth_map, depth_conf = run_VGGT(model, images, dtype, vggt_fixed_resolution)
     points_3d = unproject_depth_map_to_point_map(depth_map, extrinsic, intrinsic)
-    
     print('Predicted camera and depth maps')
 
     if args.use_ba:
@@ -175,7 +167,6 @@ def demo_fn(args):
                 fine_tracking=args.fine_tracking,
             )
             print(f"Predicted tracks")
-
             torch.cuda.empty_cache()
 
         # rescale the intrinsic matrix from 518 to 1024
@@ -196,18 +187,17 @@ def demo_fn(args):
             points_rgb=points_rgb,
         )
         print(f"Reconstructed")
-
         if reconstruction is None:
             raise ValueError("No reconstruction can be built with BA")
 
         # Bundle Adjustment
         ba_options = pycolmap.BundleAdjustmentOptions()
         pycolmap.bundle_adjustment(reconstruction, ba_options)
-
         reconstruction_resolution = img_load_resolution
     else:
         print("Running VGGT without BA")
-        conf_thres_value = args.conf_thres_value
+        conf_thres_value = np.percentile(depth_conf, q=50)
+        # conf_thres_value = 0
         max_points_for_colmap = 300000  # randomly sample 3D points
         shared_camera = False  # in the feedforward manner, we do not support shared camera
         camera_type = "PINHOLE"  # in the feedforward manner, we only support PINHOLE camera
@@ -225,7 +215,7 @@ def demo_fn(args):
         points_xyf = create_pixel_coordinate_grid(num_frames, height, width)
 
         conf_mask = depth_conf >= conf_thres_value
-        # at most writing 100000 3d points to colmap reconstruction object
+        # at most writing 300000 3d points to colmap reconstruction object
         conf_mask = randomly_limit_trues(conf_mask, max_points_for_colmap)
 
         points_3d = points_3d[conf_mask]
@@ -243,7 +233,6 @@ def demo_fn(args):
             shared_camera=shared_camera,
             camera_type=camera_type,
         )
-
         reconstruction_resolution = vggt_fixed_resolution
 
     reconstruction = rename_colmap_recons_and_rescale_camera(
@@ -254,15 +243,18 @@ def demo_fn(args):
         shift_point2d_to_original_res=True,
         shared_camera=shared_camera,
     )
-    print(f"Saving reconstruction to {args.scene_dir}/sparse/0")
+    
     sparse_reconstruction_dir = os.path.join(args.scene_dir, "sparse", "0")
+    print(f"Saving reconstruction to {sparse_reconstruction_dir}")
         
     os.makedirs(sparse_reconstruction_dir, exist_ok=True)
     reconstruction.write(sparse_reconstruction_dir)
+    if os.path.exists(os.path.join(sparse_reconstruction_dir, "points3D.ply")): # 删除旧的文件防止干扰训练
+        print(f"Removing old points3D.ply in {sparse_reconstruction_dir}")
+        os.remove(os.path.join(sparse_reconstruction_dir, "points3D.ply"))
 
     # Save point cloud for fast visualization
     trimesh.PointCloud(points_3d, colors=points_rgb).export(os.path.join(args.scene_dir, "sparse", "0", "points.ply"))
-
     return True
 
 

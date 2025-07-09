@@ -46,6 +46,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="VGGT Demo")
     parser.add_argument("--scene_dir", type=str, required=True, help="Directory containing the scene images")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
+    parser.add_argument("--valid_cam", type=str, default="0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20", help="Valid camera indices (comma-separated)")
     parser.add_argument("--use_ba", action="store_true", default=False, help="Use BA for reconstruction")
     ######### BA parameters #########
     parser.add_argument("--max_reproj_error", type=float, default=8.0, help="Maximum reprojection error for reconstruction (BA)")
@@ -117,8 +118,10 @@ def demo_fn(args):
     image_dir = os.path.join(args.scene_dir, "images")
     image_path_list = glob.glob(os.path.join(image_dir, "*"))
     
-    # 点云只要第一帧的
-    image_path_list = [img_path for img_path in image_path_list if img_path.endswith("0000.png")]
+    # 点云只要第一帧的，同时要考虑视角信息
+    image_path_list = [img_path for img_path in image_path_list 
+                       if img_path.endswith("0000.png")
+                       and int(img_path.split('/')[-1].split('cam')[-1].split('_')[0]) in args.valid_cam]
         
     n_images = len(image_path_list)
     args.query_frame_num = min(args.query_frame_num, n_images)
@@ -244,7 +247,7 @@ def demo_fn(args):
         shared_camera=shared_camera,
     )
     
-    sparse_reconstruction_dir = os.path.join(args.scene_dir, "sparse", "0")
+    sparse_reconstruction_dir = os.path.join(args.scene_dir, f"sparse_{n_images}", "0")
     print(f"Saving reconstruction to {sparse_reconstruction_dir}")
         
     os.makedirs(sparse_reconstruction_dir, exist_ok=True)
@@ -254,7 +257,7 @@ def demo_fn(args):
         os.remove(os.path.join(sparse_reconstruction_dir, "points3D.ply"))
 
     # Save point cloud for fast visualization
-    trimesh.PointCloud(points_3d, colors=points_rgb).export(os.path.join(args.scene_dir, "sparse", "0", "points.ply"))
+    trimesh.PointCloud(points_3d, colors=points_rgb).export(os.path.join(args.scene_dir, f"sparse_{n_images}", "0", "points.ply"))
     return True
 
 
@@ -301,6 +304,7 @@ def rename_colmap_recons_and_rescale_camera(
 
 if __name__ == "__main__":
     args = parse_args()
+    args.valid_cam = [int(i) for i in args.valid_cam.split(",")]
     with torch.no_grad():
         demo_fn(args)
 

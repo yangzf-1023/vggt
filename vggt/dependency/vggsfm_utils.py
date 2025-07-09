@@ -65,8 +65,9 @@ def generate_rank_by_dino(
     images = F.interpolate(images, (image_size, image_size), mode="bilinear", align_corners=False)
 
     # Load DINO model
-    # dino_v2_model = torch.hub.load("facebookresearch/dinov2", model_name)
-    dino_v2_model = torch.hub.load("/home/yangzhifan/.cache/torch/hub/facebookresearch_dinov2_main", model_name, source='local')
+    # TODO
+    dino_v2_model = torch.hub.load("facebookresearch/dinov2", model_name)
+    # dino_v2_model = torch.hub.load("/home/yangzhifan/.cache/torch/hub/facebookresearch_dinov2_main", model_name, source='local')
     dino_v2_model.eval()
     dino_v2_model = dino_v2_model.to(device)
 

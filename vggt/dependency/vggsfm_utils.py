@@ -38,7 +38,7 @@ def build_vggsfm_tracker(model_path=None):
     """
     tracker = TrackerPredictor()
 
-    tracker.load_state_dict(torch.load("checkpoint/vggsfm_v2_tracker.pt"))
+    tracker.load_state_dict(torch.load("/home/yangzhifan/vggt/checkpoint/vggsfm_v2_tracker.pt"))
 
     tracker.eval()
     return tracker
@@ -66,8 +66,8 @@ def generate_rank_by_dino(
 
     # Load DINO model
     # TODO
-    dino_v2_model = torch.hub.load("facebookresearch/dinov2", model_name)
-    # dino_v2_model = torch.hub.load("/home/yangzhifan/.cache/torch/hub/facebookresearch_dinov2_main", model_name, source='local')
+    # dino_v2_model = torch.hub.load("facebookresearch/dinov2", model_name)
+    dino_v2_model = torch.hub.load("/home/yangzhifan/.cache/torch/hub/facebookresearch_dinov2_main", model_name, source='local')
     dino_v2_model.eval()
     dino_v2_model = dino_v2_model.to(device)
 

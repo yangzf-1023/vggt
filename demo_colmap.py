@@ -9,7 +9,7 @@ import numpy as np
 import glob
 import os
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 import copy
 import torch
@@ -109,7 +109,7 @@ def demo_fn(args):
 
     # Run VGGT for camera and depth estimation
     model = VGGT()
-    model.load_state_dict(torch.load("checkpoint/model.pt"))
+    model.load_state_dict(torch.load("/home/yangzhifan/vggt/checkpoint/model.pt"))
     model.eval()
     model = model.to(device)
     print(f"Model loaded")
